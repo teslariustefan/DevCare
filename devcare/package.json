@@ -1,0 +1,23 @@
+{
+  "name": "devcare",
+  "displayName": "DevCare",
+  "publisher": "TeslariuStefanValentin",
+  "description": "",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.78.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "devcare.showDashboard",
+        "title": "Show DevCare Dashboard"
+      }
+    ]
+  }
+}
