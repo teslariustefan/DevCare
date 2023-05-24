@@ -1,65 +1,39 @@
-# devcare README
+# DevCare - Extensie Visual Studio Code
 
-This is the README for your extension "devcare". After writing up a brief description, we recommend including the following sections.
+## Descriere
 
-## Features
+**DevCare** este o extensie pentru Visual Studio Code care îți oferă posibilitatea să îți setezi un temporizator pentru lucrul cu pauze, folosind tehnica Pomodoro, sau un temporizator personalizat.
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+## Funcționalități
 
-For example if there is an image subfolder under your extension project workspace:
+- Setarea unui temporizator personalizat pentru pauze.
+- Implementarea tehnicii Pomodoro cu perioade de 25 de minute de lucru și pauze de 5 minute.
+- Posibilitatea de a întrerupe și relua temporizatorul.
+- Notificări la începutul și sfârșitul fiecărei perioade.
 
-\!\[feature X\]\(images/feature-x.png\)
+## Utilizare
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+Pentru a accesa DevCare Dashboard, urmează pașii de mai jos:
 
-## Requirements
+1. Apasă combinația de taste `Ctrl + Shift + P` pentru a deschide bara de comenzi a Visual Studio Code.
+2. Introdu comanda `Show DevCare Dashboard` și apasă Enter.
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+În DevCare Dashboard, ai următoarele opțiuni:
 
-## Extension Settings
+1. **Set reminder for break**: Setează un temporizator personalizat. Introduce numărul de minute în câmpul de lângă buton și apasă pe buton pentru a seta temporizatorul.
+2. **Start Pomodoro Technique**: Începe un ciclu Pomodoro, cu perioade de 25 de minute de lucru și pauze de 5 minute.
+3. **Pause**: Întrerupe temporizatorul actual. Poate fi folosit atât pentru temporizatorul personalizat, cât și pentru ciclul Pomodoro.
+4. **Start**: Repornește temporizatorul întrerupt. Poate fi folosit atât pentru temporizatorul personalizat, cât și pentru ciclul Pomodoro.
+5. **Switch timer**: Întrerupe temporizatorul actual și permite începerea unui alt temporizator. Poate fi folosit pentru a trece de la un temporizator personalizat la un ciclu Pomodoro sau invers.
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+## Instalare
 
-For example:
+Descarcă și instalează extensia din Visual Studio Code Marketplace. Apoi, vei putea accesa DevCare folosind pașii de mai sus.
 
-This extension contributes the following settings:
+## Contribuție
 
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+Orice contribuții sunt binevenite. Pentru orice probleme întâlnite, te rugăm să deschizi un issue.
 
-## Known Issues
+## Licență
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
-
-## Release Notes
-
-Users appreciate release notes as you update your extension.
-
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
-
----
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code.  Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux)
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux)
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+Această extensie este disponibilă sub licența MIT. Vezi fișierul `LICENSE` pentru mai multe detalii.
