@@ -2,7 +2,7 @@
   "name": "devcare",
   "displayName": "DevCare",
   "publisher": "TeslariuStefanValentin",
-  "description": "",
+  "description": "An extension for managing time and GitHub tasks with a dashboard.",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.78.0"
@@ -10,14 +10,50 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
-  "main": "./extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
         "command": "devcare.showDashboard",
         "title": "Show DevCare Dashboard"
+      },
+      {
+        "command": "devcare.authenticateWithGitHub",
+        "title": "Authenticate with GitHub"
+      },
+      {
+        "command": "devcare.fetchGitHubData",
+        "title": "Fetch GitHub Data"
       }
-    ]
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "DevCare Configuration",
+      "properties": {
+        "devcare.githubAccessToken": {
+          "type": "string",
+          "default": "",
+          "description": "GitHub Access Token for DevCare extension"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./ && npm run copy",
+    "copy": "copy .\\src\\extension.js .\\out\\extension.js"
+  },
+  "dependencies": {
+    "axios": "^0.21.1",
+    "express": "^4.17.1"
+  },
+  "devDependencies": {
+    "typescript": "^4.0.3",
+    "vscode": "^1.1.37",
+    "@types/node": "^14.14.37",
+    "@types/express": "^4.17.8",
+    "@types/vscode": "^1.1.37"
   }
 }
