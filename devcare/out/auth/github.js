@@ -42,6 +42,7 @@ const express_1 = __importDefault(require("express"));
 const CLIENT_ID = 'Ov23liXu10LVVlnv7MAw';
 const CLIENT_SECRET = '1e00adf51e3ed046cd6632e0114ac7578e1bb642';
 const REDIRECT_URI = 'http://localhost:3000/callback';
+// Funcția principală de autentificare cu GitHub
 function authenticateWithGitHub() {
     const app = (0, express_1.default)();
     const server = app.listen(3000, () => {
@@ -70,9 +71,12 @@ function authenticateWithGitHub() {
                 res.send('Error: no access token received');
                 return;
             }
-            vscode.window.showInformationMessage(`GitHub access token: ${accessToken}`);
+            vscode.window.showInformationMessage('Successfully authenticated with GitHub!');
             // Salvează tokenul de acces în contextul extensiei
             yield vscode.workspace.getConfiguration().update('devcare.githubAccessToken', accessToken, vscode.ConfigurationTarget.Global);
+            // Obține și salvează datele utilizatorului
+            const userData = yield fetchGitHubUserData(accessToken);
+            yield vscode.workspace.getConfiguration().update('devcare.githubUser', userData, vscode.ConfigurationTarget.Global);
             res.send('Authentication successful! You can close this window.');
         }
         catch (err) {
@@ -93,3 +97,15 @@ function authenticateWithGitHub() {
     vscode.env.openExternal(vscode.Uri.parse(authUrl));
 }
 exports.authenticateWithGitHub = authenticateWithGitHub;
+// Funcție auxiliară pentru obținerea datelor utilizatorului de pe GitHub
+function fetchGitHubUserData(token) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const response = yield axios_1.default.get('https://api.github.com/user', {
+            headers: { Authorization: `token ${token}` }
+        });
+        return {
+            login: response.data.login,
+            avatar_url: response.data.avatar_url
+        };
+    });
+}
