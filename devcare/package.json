@@ -37,6 +37,41 @@
           "type": "string",
           "default": "",
           "description": "GitHub Access Token for DevCare extension"
+        },
+        "devcare.githubUser": {
+          "type": "object",
+          "properties": {
+            "login": {
+              "type": "string",
+              "description": "GitHub username"
+            },
+            "avatar_url": {
+              "type": "string",
+              "description": "URL to GitHub user avatar"
+            },
+            "public_repos": {
+              "type": "number",
+              "description": "Number of public repositories"
+            },
+            "private_repos": {
+              "type": "number",
+              "description": "Number of private repositories"
+            },
+            "total_stars": {
+              "type": "number",
+              "description": "Total number of stars"
+            },
+            "followers": {
+              "type": "number",
+              "description": "Number of followers"
+            },
+            "following": {
+              "type": "number",
+              "description": "Number of following"
+            }
+          },
+          "default": {},
+          "description": "GitHub User Data"
         }
       }
     }
@@ -46,15 +81,19 @@
     "copy": "copy .\\src\\*.js .\\out\\"
   },
   "dependencies": {
-    "axios": "^0.21.1",
-    "express": "^4.17.1"
+    "@npmcli/fs": "^1.0.0",
+    "axios": "^1.7.2",
+    "express": "^4.17.1",
+    "glob": "^8.0.3",
+    "npmlog": "^6.0.2",
+    "rimraf": "^3.0.2",
+    "sqlite3": "^5.0.0"
   },
   "devDependencies": {
     "@types/express": "^4.17.8",
     "@types/node": "^14.14.37",
-    "@types/vscode": "^1.1.37",
-    "better-sqlite3": "^11.0.0",
-    "typescript": "^4.0.3",
-    "vscode": "^1.1.37"
+    "@types/vscode": "^1.78.0",
+    "@vscode/test-electron": "^2.0.0",
+    "typescript": "^4.0.3"
   }
 }

@@ -44,6 +44,11 @@ const CLIENT_SECRET = '1e00adf51e3ed046cd6632e0114ac7578e1bb642';
 const REDIRECT_URI = 'http://localhost:3000/callback';
 // Funcția principală de autentificare cu GitHub
 function authenticateWithGitHub() {
+    const oldToken = vscode.workspace.getConfiguration().get('devcare.githubAccessToken');
+    if (oldToken) {
+        vscode.workspace.getConfiguration().update('devcare.githubAccessToken', undefined, vscode.ConfigurationTarget.Global);
+        vscode.workspace.getConfiguration().update('devcare.githubUser', undefined, vscode.ConfigurationTarget.Global);
+    }
     const app = (0, express_1.default)();
     const server = app.listen(3000, () => {
         vscode.window.showInformationMessage('Server started on http://localhost:3000');
@@ -55,6 +60,7 @@ function authenticateWithGitHub() {
             return;
         }
         try {
+            console.log('Received code:', code); // Log the received code
             const tokenResponse = yield axios_1.default.post('https://github.com/login/oauth/access_token', {
                 client_id: CLIENT_ID,
                 client_secret: CLIENT_SECRET,
@@ -65,6 +71,7 @@ function authenticateWithGitHub() {
                     accept: 'application/json',
                 },
             });
+            console.log('Token response:', tokenResponse.data); // Log the token response
             const accessToken = tokenResponse.data.access_token;
             if (!accessToken) {
                 console.error('No access token received:', tokenResponse.data);
@@ -100,12 +107,63 @@ exports.authenticateWithGitHub = authenticateWithGitHub;
 // Funcție auxiliară pentru obținerea datelor utilizatorului de pe GitHub
 function fetchGitHubUserData(token) {
     return __awaiter(this, void 0, void 0, function* () {
-        const response = yield axios_1.default.get('https://api.github.com/user', {
-            headers: { Authorization: `token ${token}` }
-        });
-        return {
-            login: response.data.login,
-            avatar_url: response.data.avatar_url
-        };
+        try {
+            const userResponse = yield axios_1.default.get('https://api.github.com/user', {
+                headers: { Authorization: `token ${token}` }
+            });
+            const reposResponse = yield axios_1.default.get('https://api.github.com/user/repos', {
+                headers: { Authorization: `token ${token}` }
+            });
+            const eventsResponse = yield axios_1.default.get('https://api.github.com/users/' + userResponse.data.login + '/events', {
+                headers: { Authorization: `token ${token}` }
+            });
+            const totalStars = reposResponse.data.reduce((sum, repo) => sum + repo.stargazers_count, 0);
+            const recentCommits = eventsResponse.data
+                .filter(event => event.type === 'PushEvent')
+                .flatMap(event => event.payload.commits.map(commit => ({
+                message: commit.message,
+                date: event.created_at,
+                repository: event.repo.name
+            })))
+                .slice(0, 5);
+            const recentIssues = eventsResponse.data
+                .filter(event => event.type === 'IssuesEvent' || event.type === 'IssueCommentEvent')
+                .map(event => ({
+                title: event.payload.issue.title,
+                date: event.created_at,
+                repository: event.repo.name
+            }))
+                .slice(0, 5);
+            const recentPRs = eventsResponse.data
+                .filter(event => event.type === 'PullRequestEvent')
+                .map(event => ({
+                title: event.payload.pull_request.title,
+                date: event.created_at,
+                repository: event.repo.name
+            }))
+                .slice(0, 5);
+            return {
+                login: userResponse.data.login,
+                avatar_url: userResponse.data.avatar_url,
+                public_repos: userResponse.data.public_repos,
+                private_repos: reposResponse.data.length - userResponse.data.public_repos,
+                total_stars: totalStars,
+                followers: userResponse.data.followers,
+                following: userResponse.data.following,
+                recentCommits,
+                recentIssues,
+                recentPRs
+            };
+        }
+        catch (err) {
+            console.error('Error fetching GitHub user data:', {
+                message: err.message,
+                response: err.response ? {
+                    status: err.response.status,
+                    data: err.response.data
+                } : null
+            });
+            throw err;
+        }
     });
 }
