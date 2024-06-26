@@ -1,4 +1,27 @@
-function getWebviewContent() {
+function getWebviewContent(userInfo) {
+    console.log('User Info:', userInfo);  // Adăugăm un log pentru a verifica userInfo
+
+    const commitList = userInfo.recentCommits ? userInfo.recentCommits.map(commit => `
+        <li>
+            <strong>${commit.repository}</strong>: ${commit.message} <br>
+            <small>${commit.date}</small>
+        </li>
+    `).join('') : '<li>No recent commits</li>';
+
+    const issueList = userInfo.recentIssues ? userInfo.recentIssues.map(issue => `
+        <li>
+            <strong>${issue.repository}</strong>: ${issue.title} <br>
+            <small>${issue.date}</small>
+        </li>
+    `).join('') : '<li>No recent issues</li>';
+
+    const prList = userInfo.recentPRs ? userInfo.recentPRs.map(pr => `
+        <li>
+            <strong>${pr.repository}</strong>: ${pr.title} <br>
+            <small>${pr.date}</small>
+        </li>
+    `).join('') : '<li>No recent pull requests</li>';
+
     return `
     <!DOCTYPE html>
     <html lang="en">
@@ -132,9 +155,23 @@ function getWebviewContent() {
         <div id="authContainer">
             <p id="authMessage">Authenticated User: <span id="userName">Guest</span></p>
             <img id="authAvatar" src="" alt="User Avatar" style="display:none;"/>
+            <p>Public Repositories: <span id="publicRepos">N/A</span></p>
+            <p>Private Repositories: <span id="privateRepos">N/A</span></p>
+            <p>Total Stars: <span id="totalStars">N/A</span></p>
+            <p>Followers: <span id="followers">N/A</span></p>
+            <p>Following: <span id="following">N/A</span></p>
             <button id="authButton" title="Click to authenticate with GitHub">
                 <span>🔒</span> Authenticate with GitHub
             </button>
+        </div>
+        <div>
+            <h2>Recent Activity</h2>
+            <h3>Recent Commits</h3>
+            <ul id="commitList">${commitList}</ul>
+            <h3>Recent Issues</h3>
+            <ul id="issueList">${issueList}</ul>
+            <h3>Recent Pull Requests</h3>
+            <ul id="prList">${prList}</ul>
         </div>
         <input id="timeInput" type="number" min="1" value="60" />
         <div id="buttonContainer">
@@ -186,6 +223,31 @@ function getWebviewContent() {
                         authAvatar.style.display = 'block';
                     }
                 }
+                if (message.command === 'updateUserInfo') {
+                    document.getElementById('publicRepos').textContent = message.public_repos;
+                    document.getElementById('privateRepos').textContent = message.private_repos;
+                    document.getElementById('totalStars').textContent = message.total_stars;
+                    document.getElementById('followers').textContent = message.followers;
+                    document.getElementById('following').textContent = message.following;
+                    document.getElementById('commitList').innerHTML = message.recentCommits.map(commit => \`
+                        <li>
+                            <strong>\${commit.repository}</strong>: \${commit.message} <br>
+                            <small>\${commit.date}</small>
+                        </li>
+                    \`).join('');
+                    document.getElementById('issueList').innerHTML = message.recentIssues.map(issue => \`
+                        <li>
+                            <strong>\${issue.repository}</strong>: \${issue.title} <br>
+                            <small>\${issue.date}</small>
+                        </li>
+                    \`).join('');
+                    document.getElementById('prList').innerHTML = message.recentPRs.map(pr => \`
+                        <li>
+                            <strong>\${pr.repository}</strong>: \${pr.title} <br>
+                            <small>\${pr.date}</small>
+                        </li>
+                    \`).join('');
+                }
                 if (message.command === 'updateState') {
                     const state = message.state;
                     document.getElementById('timeInput').value = state.timeRemaining / 60;
@@ -194,6 +256,29 @@ function getWebviewContent() {
                         const authAvatar = document.getElementById('authAvatar');
                         authAvatar.src = state.githubUser.avatar_url;
                         authAvatar.style.display = 'block';
+                        document.getElementById('publicRepos').textContent = state.githubUser.public_repos;
+                        document.getElementById('privateRepos').textContent = state.githubUser.private_repos;
+                        document.getElementById('totalStars').textContent = state.githubUser.total_stars;
+                        document.getElementById('followers').textContent = state.githubUser.followers;
+                        document.getElementById('following').textContent = state.githubUser.following;
+                        document.getElementById('commitList').innerHTML = state.githubUser.recentCommits.map(commit => \`
+                            <li>
+                                <strong>\${commit.repository}</strong>: \${commit.message} <br>
+                                <small>\${commit.date}</small>
+                            </li>
+                        \`).join('');
+                        document.getElementById('issueList').innerHTML = state.githubUser.recentIssues.map(issue => \`
+                            <li>
+                                <strong>\${issue.repository}</strong>: \${issue.title} <br>
+                                <small>\${issue.date}</small>
+                            </li>
+                        \`).join('');
+                        document.getElementById('prList').innerHTML = state.githubUser.recentPRs.map(pr => \`
+                            <li>
+                                <strong>\${pr.repository}</strong>: \${pr.title} <br>
+                                <small>\${pr.date}</small>
+                            </li>
+                        \`).join('');
                     }
                     const timeRemaining = document.getElementById('timeRemaining');
                     const minutes = Math.floor(state.timeRemaining / 60);

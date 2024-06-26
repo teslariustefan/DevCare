@@ -1,7 +1,8 @@
 const vscode = require('vscode');
 const axios = require('axios');
-const { authenticateWithGitHub } = require('./auth/github.js');
-const { getWebviewContent } = require('./webviewContent.js');
+const { authenticateWithGitHub } = require('./auth/github');
+const { getWebviewContent } = require('./webviewContent');
+const db = require('./database'); // Importăm baza de date
 
 let myStatusBarItem;
 let reminderInterval;
@@ -41,7 +42,9 @@ function registerCommands(context) {
     context.subscriptions.push(
         vscode.commands.registerCommand('devcare.showDashboard', showDashboard),
         vscode.commands.registerCommand('devcare.authenticateWithGitHub', authenticateWithGitHub),
-        vscode.commands.registerCommand('devcare.fetchGitHubData', fetchGitHubData)
+        vscode.commands.registerCommand('devcare.fetchGitHubData', fetchGitHubData),
+        vscode.commands.registerCommand('devcare.startPomodoro', startPomodoro),
+        vscode.commands.registerCommand('devcare.endPomodoro', endPomodoro)
     );
 }
 
@@ -65,7 +68,9 @@ function showDashboard() {
         );
 
         dashboardPanel.webview.onDidReceiveMessage(handleWebviewMessage(dashboardPanel.webview), undefined);
-        dashboardPanel.webview.html = getWebviewContent();
+        const config = vscode.workspace.getConfiguration('devcare');
+        const githubUser = config.get('githubUser') || {};
+        dashboardPanel.webview.html = getWebviewContent(githubUser);
 
         // Trimite starea curentă către dashboard
         sendCurrentStateToWebview(dashboardPanel.webview);
@@ -104,6 +109,7 @@ function handleWebviewMessage(webview) {
                 const userData = await fetchGitHubUserName();
                 if (userData) {
                     updateUserName(webview, userData);
+                    updateUserInfo(webview, userData);
                 } else {
                     vscode.window.showErrorMessage('Failed to fetch user name.');
                 }
@@ -138,6 +144,20 @@ function updateUserName(webview, userData) {
     });
 }
 
+function updateUserInfo(webview, userData) {
+    webview.postMessage({
+        command: 'updateUserInfo',
+        public_repos: userData.public_repos,
+        private_repos: userData.private_repos,
+        total_stars: userData.total_stars,
+        followers: userData.followers,
+        following: userData.following,
+        recentCommits: userData.recentCommits,
+        recentIssues: userData.recentIssues,
+        recentPRs: userData.recentPRs
+    });
+}
+
 async function fetchGitHubUserName() {
     const token = vscode.workspace.getConfiguration().get('devcare.githubAccessToken');
     if (!token) {
@@ -151,7 +171,12 @@ async function fetchGitHubUserName() {
         });
         return {
             login: response.data.login,
-            avatar_url: response.data.avatar_url
+            avatar_url: response.data.avatar_url,
+            public_repos: response.data.public_repos,
+            private_repos: response.data.total_private_repos,
+            total_stars: response.data.total_stars,
+            followers: response.data.followers,
+            following: response.data.following
         };
     } catch (error) {
         vscode.window.showErrorMessage('Failed to fetch user name from GitHub');
@@ -244,15 +269,37 @@ function setReminder(time, webview) {
 
 function handleTimerFinish(webview) {
     if (isPomodoro) {
+        const endTime = new Date().toISOString();
+        let duration;
+
         if (pomodoroState === 'work') {
+            // Durata sesiunii de lucru (în minute)
+            duration = 25; // 25 minutes
+            // Salvăm sesiunea de lucru în baza de date
+            db.run('INSERT INTO pomodoro_sessions (start_time, end_time, duration, type) VALUES (?, ?, ?, ?)', [webview.startTime, endTime, duration, 'work'], (err) => {
+                if (err) {
+                    console.error('Error inserting session:', err.message);
+                }
+            });
+
             pomodoroCycle = (pomodoroCycle + 1) % 4;
             const message = pomodoroCycle === 0 ? 'Great work! Take a long break!' : 'Work period finished! Time for a short break!';
             vscode.window.showInformationMessage(message);
             pomodoroState = 'break';
         } else {
+            // Durata sesiunii de pauză (în minute)
+            duration = 5; // 5 minutes
+            // Salvăm sesiunea de pauză în baza de date
+            db.run('INSERT INTO pomodoro_sessions (start_time, end_time, duration, type) VALUES (?, ?, ?, ?)', [webview.startTime, endTime, duration, 'break'], (err) => {
+                if (err) {
+                    console.error('Error inserting session:', err.message);
+                }
+            });
+
             vscode.window.showInformationMessage('Break finished! Time to get back to work!');
             pomodoroState = 'work';
         }
+        webview.startTime = new Date().toISOString(); // Setează noul start time
         setPomodoroTime(webview);
     } else {
         isFinished = true;
@@ -266,11 +313,20 @@ function startPomodoro(webview) {
     isPomodoro = true;
     pomodoroCycle = 0;
     pomodoroState = 'work';
+    webview.startTime = new Date().toISOString(); // Setează start time pentru sesiunea curentă
     setPomodoroTime(webview);
 }
 
 function setPomodoroTime(webview) {
-    const time = pomodoroState === 'work' ? 25 : 5;
+    // Durata originală a sesiunii de lucru și pauză (în minute)
+    // const workTime = 25; // 25 minute
+    // const breakTime = 5; // 5 minute
+
+    // Durata modificată pentru demonstrație (în secunde)
+    const workTime = 1;
+    const breakTime = 1;
+
+    const time = pomodoroState === 'work' ? workTime : breakTime;
     resetTimer(time, webview);
 }
 
@@ -307,6 +363,21 @@ function resetStates() {
     pomodoroCycle = 0;
     wasPaused = false;
     isRunning = false;
+}
+
+function endPomodoro() {
+    const endTime = new Date().toISOString();
+    db.run('UPDATE pomodoro_sessions SET end_time = ? WHERE end_time = ""', [endTime], (err) => {
+        if (err) {
+            console.error('Error updating session:', err.message);
+        }
+    });
+    resetStates();
+    clearInterval(reminderInterval);
+    reminderInterval = null;
+    timeRemaining = null;
+    vscode.window.showInformationMessage('Pomodoro session ended.');
+    saveState();
 }
 
 module.exports = {
