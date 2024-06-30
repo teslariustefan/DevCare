@@ -1,6 +1,4 @@
 function getWebviewContent(userInfo) {
-    console.log('User Info:', userInfo);  // Adăugăm un log pentru a verifica userInfo
-
     const commitList = userInfo.recentCommits ? userInfo.recentCommits.map(commit => `
         <li>
             <strong>${commit.repository}</strong>: ${commit.message} <br>
@@ -40,52 +38,17 @@ function getWebviewContent(userInfo) {
                 flex-direction: column;
                 align-items: center;
             }
-            h1 {
-                font-size: 2.5rem;
-                margin-bottom: 20px;
+            h1, h2, h3 {
+                margin: 20px 0;
             }
-            #authContainer {
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-                align-items: center;
-                border: 1px solid #fff;
-                padding: 15px;
-                margin-bottom: 20px;
-                border-radius: 5px;
-                width: 100%;
-                max-width: 500px;
-                text-align: center;
-                gap: 10px;
-            }
-            #authMessage {
-                margin: 0;
-                font-size: 1rem;
-                color: #f0f0f0;
-            }
-            #authAvatar {
-                width: 60px;
-                height: 60px;
-                border-radius: 50%;
-                margin: 10px 0;
-                border: 2px solid #007acc;
-            }
-            #authButton {
-                padding: 10px 20px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                gap: 10px;
-                min-width: 200px;
-                max-width: 250px;
-            }
-            #buttonContainer {
-                display: grid;
-                grid-template-columns: repeat(4, 1fr);
-                gap: 10px;
-                margin-top: 20px;
+            .container {
                 width: 100%;
                 max-width: 600px;
+                margin-bottom: 20px;
+                padding: 15px;
+                border: 1px solid #fff;
+                border-radius: 5px;
+                background-color: #2e2e2e;
             }
             button {
                 background-color: #007acc;
@@ -94,10 +57,6 @@ function getWebviewContent(userInfo) {
                 padding: 10px 20px;
                 border-radius: 5px;
                 cursor: pointer;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                gap: 10px;
                 transition: background-color 0.3s, transform 0.2s, box-shadow 0.3s;
             }
             button:hover {
@@ -113,46 +72,48 @@ function getWebviewContent(userInfo) {
                 background-color: #666;
                 cursor: not-allowed;
             }
-            #timeInput {
+            input, select {
                 padding: 10px;
-                margin-bottom: 20px;
-                width: 100px;
+                margin: 10px 0;
+                width: calc(100% - 22px);
                 text-align: center;
                 border-radius: 5px;
                 border: 1px solid #fff;
                 background-color: #2e2e2e;
                 color: white;
                 font-size: 1rem;
-                transition: border-color 0.3s;
             }
-            #timeInput:focus {
+            input:focus, select:focus {
                 border-color: #007acc;
                 outline: none;
             }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 10px;
+            }
+            th, td {
+                border: 1px solid #fff;
+                padding: 10px;
+                text-align: left;
+            }
+            .pomodoro-icon {
+                color: tomato;
+                font-size: 1.5rem;
+            }
             #timeRemaining {
-                margin-top: 20px;
                 font-size: 1.2rem;
                 color: #ffcc00;
-                animation: countdown 60s linear infinite;
             }
             @keyframes countdown {
                 0% { color: #ffcc00; }
                 100% { color: #ff3333; }
             }
-            hr {
-                border: 0;
-                border-top: 1px solid #444;
-                margin: 20px 0;
-                width: 100%;
-            }
-            #switchTimerButton {
-                grid-column: span 4;
-            }
         </style>
     </head>
     <body>
         <h1>Welcome to DevCare Dashboard!</h1>
-        <div id="authContainer">
+        <div id="authContainer" class="container">
             <p id="authMessage">Authenticated User: <span id="userName">Guest</span></p>
             <img id="authAvatar" src="" alt="User Avatar" style="display:none;"/>
             <p>Public Repositories: <span id="publicRepos">N/A</span></p>
@@ -164,6 +125,25 @@ function getWebviewContent(userInfo) {
                 <span>🔒</span> Authenticate with GitHub
             </button>
         </div>
+        <div class="container">
+            <h2>Tasks</h2>
+            <form id="taskForm">
+                <input type="text" id="taskName" placeholder="Task Name" required>
+                <input type="number" id="taskPomodoros" placeholder="Pomodoros" required min="1">
+                <button type="submit">Add Task</button>
+            </form>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Tasks</th>
+                        <th>Number of Pomodoros</th>
+                    </tr>
+                </thead>
+                <tbody id="taskList">
+                    <!-- Task entries will be injected here -->
+                </tbody>
+            </table>
+        </div>
         <div>
             <h2>Recent Activity</h2>
             <h3>Recent Commits</h3>
@@ -174,7 +154,7 @@ function getWebviewContent(userInfo) {
             <ul id="prList">${prList}</ul>
         </div>
         <input id="timeInput" type="number" min="1" value="60" />
-        <div id="buttonContainer">
+        <div id="buttonContainer" class="container">
             <button id="reminderButton" title="Set a reminder for taking a break">
                 <span>🕒</span> Set reminder for break
             </button>
@@ -184,11 +164,22 @@ function getWebviewContent(userInfo) {
             <button id="resumeButton" title="Resume the paused reminder">
                 <span>▶️</span> Resume
             </button>
+            <select id="taskSelector">
+                <!-- Task options will be injected here -->
+            </select>
             <button id="pomodoroButton" title="Start the Pomodoro technique">
                 <span>🕒</span> Start Pomodoro Technique
             </button>
             <button id="switchTimerButton" title="Switch or reset the timer">
                 <span>🔄</span> Reset/Switch timer
+            </button>
+            <select id="automatedTimerLevel">
+                <option value="easy">Easy</option>
+                <option value="medium">Medium</option>
+                <option value="hard">Hard</option>
+            </select>
+            <button id="automatedTimerButton" title="Start Automated Timer">
+                <span>🕒</span> Start Automated Timer
             </button>
         </div>
         <p id="timeRemaining"></p>
@@ -196,11 +187,26 @@ function getWebviewContent(userInfo) {
         <script>
             const vscode = acquireVsCodeApi();
             document.getElementById('reminderButton').addEventListener('click', () => vscode.postMessage({ command: 'setReminder', time: document.getElementById('timeInput').value }));
-            document.getElementById('pomodoroButton').addEventListener('click', () => vscode.postMessage({ command: 'startPomodoro' }));
+            document.getElementById('pomodoroButton').addEventListener('click', () => {
+                const selectedTask = document.getElementById('taskSelector').value;
+                vscode.postMessage({ command: 'startPomodoro', taskId: selectedTask });
+            });
             document.getElementById('pauseButton').addEventListener('click', () => vscode.postMessage({ command: 'pauseReminder' }));
             document.getElementById('resumeButton').addEventListener('click', () => vscode.postMessage({ command: 'startReminder' }));
             document.getElementById('switchTimerButton').addEventListener('click', () => vscode.postMessage({ command: 'stopReminder' }));
             document.getElementById('authButton').addEventListener('click', () => vscode.postMessage({ command: 'authenticateWithGitHub' }));
+            document.getElementById('taskForm').addEventListener('submit', (event) => {
+                event.preventDefault();
+                const taskName = document.getElementById('taskName').value;
+                const taskPomodoros = document.getElementById('taskPomodoros').value;
+                vscode.postMessage({ command: 'addTask', task: { name: taskName, pomodoros: taskPomodoros } });
+                document.getElementById('taskName').value = '';
+                document.getElementById('taskPomodoros').value = '';
+            });
+            document.getElementById('automatedTimerButton').addEventListener('click', () => {
+                const level = document.getElementById('automatedTimerLevel').value;
+                vscode.postMessage({ command: 'startAutomatedTimer', level });
+            });
 
             window.addEventListener('message', event => {
                 const message = event.data;
@@ -238,13 +244,13 @@ function getWebviewContent(userInfo) {
                     document.getElementById('issueList').innerHTML = message.recentIssues.map(issue => \`
                         <li>
                             <strong>\${issue.repository}</strong>: \${issue.title} <br>
-                            <small>\${issue.date}</small>
+                            <small>\${issue.date}\</small>
                         </li>
                     \`).join('');
                     document.getElementById('prList').innerHTML = message.recentPRs.map(pr => \`
                         <li>
-                            <strong>\${pr.repository}</strong>: \${pr.title} <br>
-                            <small>\${pr.date}</small>
+                            <strong>\${pr.repository}\</strong>: \${pr.title} <br>
+                            <small>\${pr.date}\</small>
                         </li>
                     \`).join('');
                 }
@@ -263,20 +269,20 @@ function getWebviewContent(userInfo) {
                         document.getElementById('following').textContent = state.githubUser.following;
                         document.getElementById('commitList').innerHTML = state.githubUser.recentCommits.map(commit => \`
                             <li>
-                                <strong>\${commit.repository}</strong>: \${commit.message} <br>
-                                <small>\${commit.date}</small>
+                                <strong>\${commit.repository}\</strong>: \${commit.message} <br>
+                                <small>\${commit.date}\</small>
                             </li>
                         \`).join('');
                         document.getElementById('issueList').innerHTML = state.githubUser.recentIssues.map(issue => \`
                             <li>
-                                <strong>\${issue.repository}</strong>: \${issue.title} <br>
-                                <small>\${issue.date}</small>
+                                <strong>\${issue.repository}\</strong>: \${issue.title} <br>
+                                <small>\${issue.date}\</small>
                             </li>
                         \`).join('');
                         document.getElementById('prList').innerHTML = state.githubUser.recentPRs.map(pr => \`
                             <li>
-                                <strong>\${pr.repository}</strong>: \${pr.title} <br>
-                                <small>\${pr.date}</small>
+                                <strong>\${pr.repository}\</strong>: \${pr.title} <br>
+                                <small>\${pr.date}\</small>
                             </li>
                         \`).join('');
                     }
@@ -284,6 +290,27 @@ function getWebviewContent(userInfo) {
                     const minutes = Math.floor(state.timeRemaining / 60);
                     const seconds = state.timeRemaining % 60;
                     timeRemaining.textContent = \`Time remaining: \${minutes} minutes and \${seconds} seconds\`;
+                }
+                if (message.command === 'updateTasks') {
+                    const taskList = document.getElementById('taskList');
+                    const taskSelector = document.getElementById('taskSelector');
+                    taskList.innerHTML = '';
+                    taskSelector.innerHTML = '<option value="">Select a Task</option>';
+                    message.tasks.forEach(task => {
+                        const row = document.createElement('tr');
+                        const taskNameCell = document.createElement('td');
+                        const taskPomodorosCell = document.createElement('td');
+                        taskNameCell.textContent = task.name;
+                        taskPomodorosCell.innerHTML = '🍅'.repeat(task.pomodoros);
+                        row.appendChild(taskNameCell);
+                        row.appendChild(taskPomodorosCell);
+                        taskList.appendChild(row);
+
+                        const option = document.createElement('option');
+                        option.value = task.id;
+                        option.textContent = task.name + " (" + task.pomodoros + " 🍅)";
+                        taskSelector.appendChild(option);
+                    });
                 }
             });
         </script>

@@ -16,6 +16,8 @@ let wasPaused = false;
 let isRunning = false;
 let dashboardPanel;
 let extensionContext; // Variabilă globală pentru context
+let automatedTimerConfig = {}; // Configurația timerului automatizat
+let currentTaskId = null; // Task-ul selectat pentru pomodoro
 
 function activate(context) {
     extensionContext = context;
@@ -43,8 +45,10 @@ function registerCommands(context) {
         vscode.commands.registerCommand('devcare.showDashboard', showDashboard),
         vscode.commands.registerCommand('devcare.authenticateWithGitHub', authenticateWithGitHub),
         vscode.commands.registerCommand('devcare.fetchGitHubData', fetchGitHubData),
-        vscode.commands.registerCommand('devcare.startPomodoro', startPomodoro),
-        vscode.commands.registerCommand('devcare.endPomodoro', endPomodoro)
+        vscode.commands.registerCommand('devcare.startPomodoro', (taskId) => startPomodoro(taskId)),
+        vscode.commands.registerCommand('devcare.endPomodoro', endPomodoro),
+        vscode.commands.registerCommand('devcare.addTask', addTask),
+        vscode.commands.registerCommand('devcare.startAutomatedTimer', startAutomatedTimer)
     );
 }
 
@@ -56,7 +60,10 @@ function showDashboard() {
             'DevcareDashboard',
             'DevCare Dashboard',
             vscode.ViewColumn.One,
-            { enableScripts: true }
+            {
+                enableScripts: true,
+                retainContextWhenHidden: true,
+            }
         );
 
         dashboardPanel.onDidDispose(
@@ -88,7 +95,7 @@ function handleWebviewMessage(webview) {
                 break;
             case 'startPomodoro':
                 if (!isRunning) {
-                    startPomodoro(webview);
+                    startPomodoro(message.taskId, webview);
                     isRunning = true;
                 }
                 break;
@@ -114,6 +121,12 @@ function handleWebviewMessage(webview) {
                     vscode.window.showErrorMessage('Failed to fetch user name.');
                 }
                 break;
+            case 'addTask':
+                addTask(message.task);
+                break;
+            case 'startAutomatedTimer':
+                startAutomatedTimer(message.level, webview);
+                break;
         }
     };
 }
@@ -131,7 +144,8 @@ function sendCurrentStateToWebview(webview) {
         pomodoroCycle,
         wasPaused,
         isRunning,
-        githubUser: token ? githubUser : null
+        githubUser: token ? githubUser : null,
+        currentTaskId
     };
     webview.postMessage({ command: 'updateState', state });
 }
@@ -213,7 +227,9 @@ function saveState() {
         pomodoroState,
         pomodoroCycle,
         wasPaused,
-        isRunning
+        isRunning,
+        automatedTimerConfig,
+        currentTaskId
     }, vscode.ConfigurationTarget.Global);
 }
 
@@ -229,12 +245,158 @@ function restoreState() {
         pomodoroCycle = savedState.pomodoroCycle;
         wasPaused = savedState.wasPaused;
         isRunning = savedState.isRunning;
+        automatedTimerConfig = savedState.automatedTimerConfig || {};
+        currentTaskId = savedState.currentTaskId;
 
         if (isRunning) {
             // Restaurează timer-ul
             setReminder(timeRemaining / 60, null);
         }
     }
+}
+
+function addTask(task) {
+    db.run('INSERT INTO tasks (name, pomodoros) VALUES (?, ?)', [task.name, task.pomodoros], (err) => {
+        if (err) {
+            console.error('Error adding task:', err.message);
+        } else {
+            updateTasks();
+        }
+    });
+}
+
+function updateTasks() {
+    db.all('SELECT * FROM tasks', [], (err, rows) => {
+        if (err) {
+            console.error('Error fetching tasks:', err.message);
+        } else {
+            if (dashboardPanel) {
+                dashboardPanel.webview.postMessage({ command: 'updateTasks', tasks: rows });
+            }
+        }
+    });
+}
+
+function startAutomatedTimer(level, webview) {
+    let workTime, shortBreak, longBreak, cycles;
+
+    switch (level) {
+        case 'easy':
+            workTime = 20;
+            shortBreak = 5;
+            longBreak = 15;
+            cycles = 4;
+            break;
+        case 'medium':
+            workTime = 35;
+            shortBreak = 5;
+            longBreak = 20;
+            cycles = 4;
+            break;
+        case 'hard':
+            workTime = 50;
+            shortBreak = 10;
+            longBreak = 30;
+            cycles = 4;
+            break;
+        default:
+            vscode.window.showErrorMessage('Invalid difficulty level');
+            return;
+    }
+
+    automatedTimerConfig = {
+        workTime,
+        shortBreak,
+        longBreak,
+        cycles,
+        currentCycle: 0,
+        state: 'work'
+    };
+
+    isRunning = true;
+    setAutomatedTimer(webview);
+}
+
+function setAutomatedTimer(webview) {
+    const { workTime, shortBreak, longBreak, cycles, currentCycle, state } = automatedTimerConfig;
+
+    let time;
+    if (state === 'work') {
+        time = workTime;
+        automatedTimerConfig.state = 'shortBreak';
+    } else if (state === 'shortBreak') {
+        time = shortBreak;
+        automatedTimerConfig.currentCycle++;
+        automatedTimerConfig.state = automatedTimerConfig.currentCycle < cycles ? 'work' : 'longBreak';
+    } else if (state === 'longBreak') {
+        time = longBreak;
+        automatedTimerConfig.currentCycle = 0;
+        automatedTimerConfig.state = 'work';
+    }
+
+    resetAutomatedTimer(time, webview);
+}
+
+function resetAutomatedTimer(time, webview) {
+    timeRemaining = time * 60;
+    isPaused = false;
+    isFinished = false;
+    setAutomatedReminder(time, webview);
+}
+
+function setAutomatedReminder(time, webview) {
+    if (!isPaused && !isFinished) {
+        timeRemaining = parseInt(time) * 60;
+        vscode.window.showInformationMessage('Automated Timer started!');
+    } else if (isPaused && !isFinished) {
+        vscode.window.showInformationMessage('Automated Timer resumed!');
+    }
+
+    isPaused = false;
+    wasPaused = false;
+
+    if (isFinished) return;
+
+    if (reminderInterval) clearInterval(reminderInterval);
+
+    reminderInterval = setInterval(() => {
+        if (isPaused) return;
+
+        if (timeRemaining <= 0) {
+            handleAutomatedTimerFinish(webview);
+        } else {
+            if (dashboardPanel) {
+                dashboardPanel.webview.postMessage({ command: 'updateTime', time: timeRemaining });
+            }
+            timeRemaining--;
+        }
+    }, 1000);
+    saveState();
+}
+
+function handleAutomatedTimerFinish(webview) {
+    const { currentCycle, cycles, state } = automatedTimerConfig;
+
+    if (state === 'work') {
+        vscode.window.showInformationMessage('Work period finished! Time for a short break!');
+    } else if (state === 'shortBreak') {
+        if (currentCycle < cycles) {
+            vscode.window.showInformationMessage('Short break finished! Time to get back to work!');
+        } else {
+            vscode.window.showInformationMessage('Great work! Time for a long break!');
+        }
+    } else if (state === 'longBreak') {
+        vscode.window.showInformationMessage('Long break finished! Time to get back to work!');
+    }
+
+    if (state !== 'longBreak') {
+        setAutomatedTimer(webview);
+    } else {
+        isFinished = true;
+        clearInterval(reminderInterval);
+    }
+
+    saveState();
 }
 
 function setReminder(time, webview) {
@@ -286,6 +448,17 @@ function handleTimerFinish(webview) {
             const message = pomodoroCycle === 0 ? 'Great work! Take a long break!' : 'Work period finished! Time for a short break!';
             vscode.window.showInformationMessage(message);
             pomodoroState = 'break';
+
+            // Actualizează numărul de 🍅 al task-ului selectat
+            if (currentTaskId) {
+                db.run('UPDATE tasks SET pomodoros = pomodoros - 1 WHERE id = ?', [currentTaskId], (err) => {
+                    if (err) {
+                        console.error('Error updating task:', err.message);
+                    } else {
+                        updateTasks();
+                    }
+                });
+            }
         } else {
             // Durata sesiunii de pauză (în minute)
             duration = 5; // 5 minutes
@@ -309,7 +482,12 @@ function handleTimerFinish(webview) {
     saveState();
 }
 
-function startPomodoro(webview) {
+function startPomodoro(taskId, webview) {
+    if (!taskId) {
+        vscode.window.showErrorMessage('Please select a task to start the Pomodoro timer.');
+        return;
+    }
+    currentTaskId = taskId;
     isPomodoro = true;
     pomodoroCycle = 0;
     pomodoroState = 'work';
@@ -363,6 +541,7 @@ function resetStates() {
     pomodoroCycle = 0;
     wasPaused = false;
     isRunning = false;
+    currentTaskId = null;
 }
 
 function endPomodoro() {
