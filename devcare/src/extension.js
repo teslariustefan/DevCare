@@ -2,7 +2,7 @@ const vscode = require('vscode');
 const axios = require('axios');
 const { authenticateWithGitHub } = require('./auth/github');
 const { getWebviewContent } = require('./webviewContent');
-const db = require('./database'); // Importăm baza de date
+const { db, getDailySessionTimes, getAverageSessionTimes, getSessionCountsPerDay, addTask, getTasks } = require('./database');
 
 let myStatusBarItem;
 let reminderInterval;
@@ -15,18 +15,17 @@ let pomodoroCycle = 0;
 let wasPaused = false;
 let isRunning = false;
 let dashboardPanel;
-let extensionContext; // Variabilă globală pentru context
-let automatedTimerConfig = {}; // Configurația timerului automatizat
-let currentTaskId = null; // Task-ul selectat pentru pomodoro
+let extensionContext;
+let automatedTimerConfig = {};
+let currentTaskId = null;
 
 function activate(context) {
     extensionContext = context;
     initializeStatusBarItem(context);
     registerCommands(context);
 
-    restoreState(); // Restaurează starea
+    restoreState();
 
-    // Asigură-te că timer-ul continuă să ruleze în fundal
     if (isRunning) {
         setReminder(timeRemaining / 60, null);
     }
@@ -47,7 +46,7 @@ function registerCommands(context) {
         vscode.commands.registerCommand('devcare.fetchGitHubData', fetchGitHubData),
         vscode.commands.registerCommand('devcare.startPomodoro', (taskId) => startPomodoro(taskId)),
         vscode.commands.registerCommand('devcare.endPomodoro', endPomodoro),
-        vscode.commands.registerCommand('devcare.addTask', addTask),
+        vscode.commands.registerCommand('devcare.addTask', addNewTask),
         vscode.commands.registerCommand('devcare.startAutomatedTimer', startAutomatedTimer)
     );
 }
@@ -79,13 +78,18 @@ function showDashboard() {
         const githubUser = config.get('githubUser') || {};
         dashboardPanel.webview.html = getWebviewContent(githubUser);
 
-        // Trimite starea curentă către dashboard
         sendCurrentStateToWebview(dashboardPanel.webview);
+        sendSessionTimesToWebview(dashboardPanel.webview);
+        sendAverageSessionTimesToWebview(dashboardPanel.webview);
+        sendSessionCountsToWebview(dashboardPanel.webview);
+        updateTasks(); // Load tasks when dashboard is shown
     }
 }
 
 function handleWebviewMessage(webview) {
     return async message => {
+        console.log("Received message: ", message); // Log the message
+
         switch (message.command) {
             case 'setReminder':
                 if (!isRunning || !isPomodoro) {
@@ -122,7 +126,8 @@ function handleWebviewMessage(webview) {
                 }
                 break;
             case 'addTask':
-                addTask(message.task);
+                console.log("Adding task: ", message.task); // Log the task being added
+                addNewTask(message.task);
                 break;
             case 'startAutomatedTimer':
                 startAutomatedTimer(message.level, webview);
@@ -162,7 +167,7 @@ function updateUserInfo(webview, userData) {
     webview.postMessage({
         command: 'updateUserInfo',
         public_repos: userData.public_repos,
-        private_repos: userData.private_repos,
+        private_repos: userData.total_private_repos,
         total_stars: userData.total_stars,
         followers: userData.followers,
         following: userData.following,
@@ -249,26 +254,25 @@ function restoreState() {
         currentTaskId = savedState.currentTaskId;
 
         if (isRunning) {
-            // Restaurează timer-ul
             setReminder(timeRemaining / 60, null);
         }
     }
 }
 
-function addTask(task) {
-    db.run('INSERT INTO tasks (name, pomodoros) VALUES (?, ?)', [task.name, task.pomodoros], (err) => {
+function addNewTask(task) {
+    addTask(task, (err, result) => {
         if (err) {
-            console.error('Error adding task:', err.message);
+            vscode.window.showErrorMessage('Failed to add task.');
         } else {
-            updateTasks();
+            updateTasks(); // Asigurăm că updateTasks este apelată pentru a actualiza webview-ul
         }
     });
 }
 
 function updateTasks() {
-    db.all('SELECT * FROM tasks', [], (err, rows) => {
+    getTasks((err, rows) => {
         if (err) {
-            console.error('Error fetching tasks:', err.message);
+            vscode.window.showErrorMessage('Failed to fetch tasks.');
         } else {
             if (dashboardPanel) {
                 dashboardPanel.webview.postMessage({ command: 'updateTasks', tasks: rows });
@@ -435,9 +439,7 @@ function handleTimerFinish(webview) {
         let duration;
 
         if (pomodoroState === 'work') {
-            // Durata sesiunii de lucru (în minute)
-            duration = 25; // 25 minutes
-            // Salvăm sesiunea de lucru în baza de date
+            duration = 25;
             db.run('INSERT INTO pomodoro_sessions (start_time, end_time, duration, type) VALUES (?, ?, ?, ?)', [webview.startTime, endTime, duration, 'work'], (err) => {
                 if (err) {
                     console.error('Error inserting session:', err.message);
@@ -449,7 +451,6 @@ function handleTimerFinish(webview) {
             vscode.window.showInformationMessage(message);
             pomodoroState = 'break';
 
-            // Actualizează numărul de 🍅 al task-ului selectat
             if (currentTaskId) {
                 db.run('UPDATE tasks SET pomodoros = pomodoros - 1 WHERE id = ?', [currentTaskId], (err) => {
                     if (err) {
@@ -460,9 +461,7 @@ function handleTimerFinish(webview) {
                 });
             }
         } else {
-            // Durata sesiunii de pauză (în minute)
-            duration = 5; // 5 minutes
-            // Salvăm sesiunea de pauză în baza de date
+            duration = 5;
             db.run('INSERT INTO pomodoro_sessions (start_time, end_time, duration, type) VALUES (?, ?, ?, ?)', [webview.startTime, endTime, duration, 'break'], (err) => {
                 if (err) {
                     console.error('Error inserting session:', err.message);
@@ -472,7 +471,7 @@ function handleTimerFinish(webview) {
             vscode.window.showInformationMessage('Break finished! Time to get back to work!');
             pomodoroState = 'work';
         }
-        webview.startTime = new Date().toISOString(); // Setează noul start time
+        webview.startTime = new Date().toISOString();
         setPomodoroTime(webview);
     } else {
         isFinished = true;
@@ -491,16 +490,11 @@ function startPomodoro(taskId, webview) {
     isPomodoro = true;
     pomodoroCycle = 0;
     pomodoroState = 'work';
-    webview.startTime = new Date().toISOString(); // Setează start time pentru sesiunea curentă
+    webview.startTime = new Date().toISOString();
     setPomodoroTime(webview);
 }
 
 function setPomodoroTime(webview) {
-    // Durata originală a sesiunii de lucru și pauză (în minute)
-    // const workTime = 25; // 25 minute
-    // const breakTime = 5; // 5 minute
-
-    // Durata modificată pentru demonstrație (în secunde)
     const workTime = 1;
     const breakTime = 1;
 
@@ -557,6 +551,45 @@ function endPomodoro() {
     timeRemaining = null;
     vscode.window.showInformationMessage('Pomodoro session ended.');
     saveState();
+}
+
+function sendSessionTimesToWebview(webview) {
+    getDailySessionTimes((err, rows) => {
+        if (err) {
+            vscode.window.showErrorMessage('Failed to fetch session times.');
+            return;
+        }
+        webview.postMessage({
+            command: 'loadSessionTimes',
+            data: rows
+        });
+    });
+}
+
+function sendAverageSessionTimesToWebview(webview) {
+    getAverageSessionTimes((err, row) => {
+        if (err) {
+            vscode.window.showErrorMessage('Failed to fetch average session times.');
+            return;
+        }
+        webview.postMessage({
+            command: 'loadAverageSessionTimes',
+            data: row
+        });
+    });
+}
+
+function sendSessionCountsToWebview(webview) {
+    getSessionCountsPerDay((err, rows) => {
+        if (err) {
+            vscode.window.showErrorMessage('Failed to fetch session counts.');
+            return;
+        }
+        webview.postMessage({
+            command: 'loadSessionCounts',
+            data: rows
+        });
+    });
 }
 
 module.exports = {

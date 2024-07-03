@@ -50,6 +50,9 @@ function getWebviewContent(userInfo) {
                 border-radius: 5px;
                 background-color: #2e2e2e;
             }
+            canvas {
+                background-color: #add8e6; /* Fundal albastru deschis */
+            }
             button {
                 background-color: #007acc;
                 color: white;
@@ -113,6 +116,22 @@ function getWebviewContent(userInfo) {
     </head>
     <body>
         <h1>Welcome to DevCare Dashboard!</h1>
+        <div class="container">
+            <h2>Timp total de lucru și pauză pe zi</h2>
+            <canvas id="sessionTimesChart" width="400" height="200"></canvas>
+        </div>
+        <div class="container">
+            <h2>Proporția timpului de lucru și pauză</h2>
+            <canvas id="workBreakProportionChart" width="400" height="200"></canvas>
+        </div>
+        <div class="container">
+            <h2>Timp mediu de lucru și pauză pe sesiune</h2>
+            <canvas id="averageSessionTimesChart" width="400" height="200"></canvas>
+        </div>
+        <div class="container">
+            <h2>Numărul de sesiuni de lucru și pauză pe zi</h2>
+            <canvas id="sessionCountsChart" width="400" height="200"></canvas>
+        </div>
         <div id="authContainer" class="container">
             <p id="authMessage">Authenticated User: <span id="userName">Guest</span></p>
             <img id="authAvatar" src="" alt="User Avatar" style="display:none;"/>
@@ -184,32 +203,26 @@ function getWebviewContent(userInfo) {
         </div>
         <p id="timeRemaining"></p>
 
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script>
             const vscode = acquireVsCodeApi();
-            document.getElementById('reminderButton').addEventListener('click', () => vscode.postMessage({ command: 'setReminder', time: document.getElementById('timeInput').value }));
-            document.getElementById('pomodoroButton').addEventListener('click', () => {
-                const selectedTask = document.getElementById('taskSelector').value;
-                vscode.postMessage({ command: 'startPomodoro', taskId: selectedTask });
-            });
-            document.getElementById('pauseButton').addEventListener('click', () => vscode.postMessage({ command: 'pauseReminder' }));
-            document.getElementById('resumeButton').addEventListener('click', () => vscode.postMessage({ command: 'startReminder' }));
-            document.getElementById('switchTimerButton').addEventListener('click', () => vscode.postMessage({ command: 'stopReminder' }));
-            document.getElementById('authButton').addEventListener('click', () => vscode.postMessage({ command: 'authenticateWithGitHub' }));
-            document.getElementById('taskForm').addEventListener('submit', (event) => {
-                event.preventDefault();
-                const taskName = document.getElementById('taskName').value;
-                const taskPomodoros = document.getElementById('taskPomodoros').value;
-                vscode.postMessage({ command: 'addTask', task: { name: taskName, pomodoros: taskPomodoros } });
-                document.getElementById('taskName').value = '';
-                document.getElementById('taskPomodoros').value = '';
-            });
-            document.getElementById('automatedTimerButton').addEventListener('click', () => {
-                const level = document.getElementById('automatedTimerLevel').value;
-                vscode.postMessage({ command: 'startAutomatedTimer', level });
-            });
+            let sessionTimesChart;
+            let workBreakProportionChart;
+            let averageSessionTimesChart;
+            let sessionCountsChart;
 
             window.addEventListener('message', event => {
                 const message = event.data;
+                if (message.command === 'loadSessionTimes') {
+                    updateSessionTimesChart(message.data);
+                    updateWorkBreakProportionChart(message.data);
+                }
+                if (message.command === 'loadAverageSessionTimes') {
+                    updateAverageSessionTimesChart(message.data);
+                }
+                if (message.command === 'loadSessionCounts') {
+                    updateSessionCountsChart(message.data);
+                }
                 if (message.command === 'updateTime') {
                     const timeRemaining = document.getElementById('timeRemaining');
                     if (message.time <= 0) {
@@ -238,12 +251,12 @@ function getWebviewContent(userInfo) {
                     document.getElementById('commitList').innerHTML = message.recentCommits.map(commit => \`
                         <li>
                             <strong>\${commit.repository}</strong>: \${commit.message} <br>
-                            <small>\${commit.date}</small>
+                            <small>\${commit.date}\</small>
                         </li>
                     \`).join('');
                     document.getElementById('issueList').innerHTML = message.recentIssues.map(issue => \`
                         <li>
-                            <strong>\${issue.repository}</strong>: \${issue.title} <br>
+                            <strong>\${issue.repository}\</strong>: \${issue.title} <br>
                             <small>\${issue.date}\</small>
                         </li>
                     \`).join('');
@@ -312,6 +325,176 @@ function getWebviewContent(userInfo) {
                         taskSelector.appendChild(option);
                     });
                 }
+            });
+
+            function updateSessionTimesChart(data) {
+                const labels = data.map(row => row.session_date);
+                const workTimes = data.map(row => row.total_work_time / 60);
+                const breakTimes = data.map(row => row.total_break_time / 60);
+
+                const ctx = document.getElementById('sessionTimesChart').getContext('2d');
+                if (sessionTimesChart) {
+                    sessionTimesChart.destroy();
+                }
+                sessionTimesChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            {
+                                label: 'Work Time (minutes)',
+                                data: workTimes,
+                                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                                borderColor: 'rgba(75, 192, 192, 1)',
+                                borderWidth: 1
+                            },
+                            {
+                                label: 'Break Time (minutes)',
+                                data: breakTimes,
+                                backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                                borderColor: 'rgba(255, 99, 132, 1)',
+                                borderWidth: 1
+                            }
+                        ]
+                    },
+                    options: {
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+            }
+
+            function updateWorkBreakProportionChart(data) {
+                const totalWorkTime = data.reduce((sum, row) => sum + row.total_work_time, 0);
+                const totalBreakTime = data.reduce((sum, row) => sum + row.total_break_time, 0);
+
+                const ctx = document.getElementById('workBreakProportionChart').getContext('2d');
+                if (workBreakProportionChart) {
+                    workBreakProportionChart.destroy();
+                }
+                workBreakProportionChart = new Chart(ctx, {
+                    type: 'pie',
+                    data: {
+                        labels: ['Work Time', 'Break Time'],
+                        datasets: [{
+                            data: [totalWorkTime / 60, totalBreakTime / 60],
+                            backgroundColor: ['rgba(75, 192, 192, 0.2)', 'rgba(255, 99, 132, 0.2)'],
+                            borderColor: ['rgba(75, 192, 192, 1)', 'rgba(255, 99, 132, 1)'],
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const label = context.label || '';
+                                        const value = context.raw || 0;
+                                        return label + ": " + value.toFixed(2) + " minutes";
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            function updateAverageSessionTimesChart(data) {
+                const ctx = document.getElementById('averageSessionTimesChart').getContext('2d');
+                if (averageSessionTimesChart) {
+                    averageSessionTimesChart.destroy();
+                }
+                averageSessionTimesChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Average Work Time', 'Average Break Time'],
+                        datasets: [{
+                            label: 'Average Time (minutes)',
+                            data: [data.avg_work_time / 60, data.avg_break_time / 60],
+                            backgroundColor: ['rgba(75, 192, 192, 0.2)', 'rgba(255, 99, 132, 0.2)'],
+                            borderColor: ['rgba(75, 192, 192, 1)', 'rgba(255, 99, 132, 1)'],
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+            }
+
+            function updateSessionCountsChart(data) {
+                const labels = data.map(row => row.session_date);
+                const workSessions = data.map(row => row.work_sessions);
+                const breakSessions = data.map(row => row.break_sessions);
+
+                const ctx = document.getElementById('sessionCountsChart').getContext('2d');
+                if (sessionCountsChart) {
+                    sessionCountsChart.destroy();
+                }
+                sessionCountsChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [
+                            {
+                                label: 'Work Sessions',
+                                data: workSessions,
+                                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                                borderColor: 'rgba(75, 192, 192, 1)',
+                                borderWidth: 1,
+                                fill: false
+                            },
+                            {
+                                label: 'Break Sessions',
+                                data: breakSessions,
+                                backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                                borderColor: 'rgba(255, 99, 132, 1)',
+                                borderWidth: 1,
+                                fill: false
+                            }
+                        ]
+                    },
+                    options: {
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+            }
+
+            document.getElementById('reminderButton').addEventListener('click', () => vscode.postMessage({ command: 'setReminder', time: document.getElementById('timeInput').value }));
+            document.getElementById('pomodoroButton').addEventListener('click', () => {
+                const selectedTask = document.getElementById('taskSelector').value;
+                vscode.postMessage({ command: 'startPomodoro', taskId: selectedTask });
+            });
+            document.getElementById('pauseButton').addEventListener('click', () => vscode.postMessage({ command: 'pauseReminder' }));
+            document.getElementById('resumeButton').addEventListener('click', () => vscode.postMessage({ command: 'startReminder' }));
+            document.getElementById('switchTimerButton').addEventListener('click', () => vscode.postMessage({ command: 'stopReminder' }));
+            document.getElementById('authButton').addEventListener('click', () => vscode.postMessage({ command: 'authenticateWithGitHub' }));
+            document.getElementById('taskForm').addEventListener('submit', (event) => {
+                event.preventDefault();
+                const taskName = document.getElementById('taskName').value;
+                const taskPomodoros = document.getElementById('taskPomodoros').value;
+                vscode.postMessage({ command: 'addTask', task: { name: taskName, pomodoros: taskPomodoros } });
+                document.getElementById('taskName').value = '';
+                document.getElementById('taskPomodoros').value = '';
+            });
+            document.getElementById('automatedTimerButton').addEventListener('click', () => {
+                const level = document.getElementById('automatedTimerLevel').value;
+                vscode.postMessage({ command: 'startAutomatedTimer', level });
             });
         </script>
     </body>
