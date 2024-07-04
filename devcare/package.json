@@ -11,7 +11,8 @@
     "Other"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onCommand:devcare.showLogin"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -27,6 +28,10 @@
       {
         "command": "devcare.fetchGitHubData",
         "title": "Fetch GitHub Data"
+      },
+      {
+        "command": "devcare.showLogin",
+        "title": "Activate DevCare Dashboard"
       }
     ],
     "configuration": {

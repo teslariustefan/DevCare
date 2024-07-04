@@ -1,8 +1,9 @@
 const vscode = require('vscode');
 const axios = require('axios');
-const { authenticateWithGitHub } = require('./auth/github');
+const { authenticateWithGitHub, fetchGitHubUserData } = require('./auth/github');
 const { getWebviewContent } = require('./webviewContent');
-const { db, getDailySessionTimes, getAverageSessionTimes, getSessionCountsPerDay, addTask, getTasks } = require('./database');
+const { getLoginViewContent } = require('./loginView');
+const { db, getDailySessionTimes, getAverageSessionTimes, getSessionCountsPerDay, addTask, getTasks, updateTask, deleteTask, calculateWeeklyRating } = require('./database');
 
 let myStatusBarItem;
 let reminderInterval;
@@ -15,6 +16,7 @@ let pomodoroCycle = 0;
 let wasPaused = false;
 let isRunning = false;
 let dashboardPanel;
+let loginPanel;
 let extensionContext;
 let automatedTimerConfig = {};
 let currentTaskId = null;
@@ -29,11 +31,14 @@ function activate(context) {
     if (isRunning) {
         setReminder(timeRemaining / 60, null);
     }
+
+    // Calculate and show rating on activation
+    calculateAndShowRating();
 }
 
 function initializeStatusBarItem(context) {
     myStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-    myStatusBarItem.command = 'devcare.showDashboard';
+    myStatusBarItem.command = 'devcare.showLogin';
     myStatusBarItem.text = "$(watch) Activate DevCare Dashboard";
     myStatusBarItem.show();
     context.subscriptions.push(myStatusBarItem);
@@ -42,6 +47,7 @@ function initializeStatusBarItem(context) {
 function registerCommands(context) {
     context.subscriptions.push(
         vscode.commands.registerCommand('devcare.showDashboard', showDashboard),
+        vscode.commands.registerCommand('devcare.showLogin', showLogin),
         vscode.commands.registerCommand('devcare.authenticateWithGitHub', authenticateWithGitHub),
         vscode.commands.registerCommand('devcare.fetchGitHubData', fetchGitHubData),
         vscode.commands.registerCommand('devcare.startPomodoro', (taskId) => startPomodoro(taskId)),
@@ -51,7 +57,100 @@ function registerCommands(context) {
     );
 }
 
+function showLogin() {
+    if (loginPanel) {
+        loginPanel.reveal(vscode.ViewColumn.One);
+    } else {
+        loginPanel = vscode.window.createWebviewPanel(
+            'DevcareLogin',
+            'DevCare Login',
+            vscode.ViewColumn.One,
+            {
+                enableScripts: true,
+                retainContextWhenHidden: true,
+            }
+        );
+
+        loginPanel.onDidDispose(
+            () => {
+                loginPanel = undefined;
+            },
+            null,
+            extensionContext.subscriptions
+        );
+
+        loginPanel.webview.onDidReceiveMessage(handleLoginMessage(loginPanel.webview), undefined);
+        loginPanel.webview.html = getLoginViewContent();
+    }
+}
+
+function handleLoginMessage(webview) {
+    return async message => {
+        switch (message.command) {
+            case 'authenticateWithGitHub':
+                try {
+                    await authenticateWithGitHub();
+                    const userData = await fetchGitHubUserNameWithRetry();
+                    console.log('Fetched user data:', userData);
+
+                    if (userData) {
+                        await vscode.workspace.getConfiguration('devcare').update('githubUser', userData, vscode.ConfigurationTarget.Global);
+                        vscode.window.showInformationMessage('Successfully authenticated with GitHub!');
+                        showDashboard();
+                    } else {
+                        vscode.window.showErrorMessage('Failed to fetch user name after multiple attempts.');
+                    }
+                } catch (error) {
+                    vscode.window.showErrorMessage('Failed to authenticate with GitHub after multiple attempts.');
+                }
+                break;
+            case 'continueAsGuest':
+                await vscode.workspace.getConfiguration('devcare').update('githubAccessToken', undefined, vscode.ConfigurationTarget.Global);
+                await vscode.workspace.getConfiguration('devcare').update('githubUser', undefined, vscode.ConfigurationTarget.Global);
+                showDashboard();
+                break;
+        }
+    };
+}
+
+async function fetchGitHubUserNameWithRetry(retries = 5, delay = 1000) {
+    let userData = null;
+    while (retries > 0 && !userData) {
+        try {
+            userData = await fetchGitHubUserName();
+        } catch (error) {
+            if (retries === 1) {
+                console.error('Failed to fetch user name:', error);
+            }
+        }
+        if (!userData) {
+            await new Promise(resolve => setTimeout(resolve, delay));
+            retries--;
+        }
+    }
+    return userData;
+}
+
+async function fetchGitHubUserName() {
+    const token = vscode.workspace.getConfiguration().get('devcare.githubAccessToken');
+    if (!token) {
+        return null;
+    }
+
+    try {
+        const userData = await fetchGitHubUserData(token);
+        console.log('Fetched GitHub user data:', userData);
+        return userData;
+    } catch (error) {
+        console.error('Error fetching GitHub user data:', error);
+        throw error;
+    }
+}
+
 function showDashboard() {
+    if (loginPanel) {
+        loginPanel.dispose();
+    }
     if (dashboardPanel) {
         dashboardPanel.reveal(vscode.ViewColumn.One);
     } else {
@@ -76,20 +175,22 @@ function showDashboard() {
         dashboardPanel.webview.onDidReceiveMessage(handleWebviewMessage(dashboardPanel.webview), undefined);
         const config = vscode.workspace.getConfiguration('devcare');
         const githubUser = config.get('githubUser') || {};
+        console.log('Showing dashboard with user data:', githubUser);
         dashboardPanel.webview.html = getWebviewContent(githubUser);
 
         sendCurrentStateToWebview(dashboardPanel.webview);
         sendSessionTimesToWebview(dashboardPanel.webview);
         sendAverageSessionTimesToWebview(dashboardPanel.webview);
         sendSessionCountsToWebview(dashboardPanel.webview);
-        updateTasks(); // Load tasks when dashboard is shown
+        updateTasks();
+
+        // Calculate and send rating to webview
+        calculateAndShowRating();
     }
 }
 
 function handleWebviewMessage(webview) {
     return async message => {
-        console.log("Received message: ", message); // Log the message
-
         switch (message.command) {
             case 'setReminder':
                 if (!isRunning || !isPomodoro) {
@@ -116,18 +217,39 @@ function handleWebviewMessage(webview) {
                 stopReminder();
                 break;
             case 'authenticateWithGitHub':
-                await authenticateWithGitHub();
-                const userData = await fetchGitHubUserName();
-                if (userData) {
-                    updateUserName(webview, userData);
-                    updateUserInfo(webview, userData);
-                } else {
-                    vscode.window.showErrorMessage('Failed to fetch user name.');
+                try {
+                    await authenticateWithGitHub();
+                    const userData = await fetchGitHubUserName();
+                    if (userData) {
+                        updateUserName(webview, userData);
+                        updateUserInfo(webview, userData);
+                    } else {
+                        vscode.window.showErrorMessage('Failed to fetch user name.');
+                    }
+                } catch (error) {
+                    vscode.window.showErrorMessage('Failed to authenticate with GitHub.');
                 }
                 break;
             case 'addTask':
-                console.log("Adding task: ", message.task); // Log the task being added
                 addNewTask(message.task);
+                break;
+            case 'deleteTask':
+                deleteTask(message.taskId, (err) => {
+                    if (err) {
+                        vscode.window.showErrorMessage('Failed to delete task.');
+                    } else {
+                        updateTasks();
+                    }
+                });
+                break;
+            case 'editTask':
+                editTask(message.task, (err) => {
+                    if (err) {
+                        vscode.window.showErrorMessage('Failed to edit task.');
+                    } else {
+                        updateTasks();
+                    }
+                });
                 break;
             case 'startAutomatedTimer':
                 startAutomatedTimer(message.level, webview);
@@ -175,33 +297,6 @@ function updateUserInfo(webview, userData) {
         recentIssues: userData.recentIssues,
         recentPRs: userData.recentPRs
     });
-}
-
-async function fetchGitHubUserName() {
-    const token = vscode.workspace.getConfiguration().get('devcare.githubAccessToken');
-    if (!token) {
-        vscode.window.showErrorMessage('Not authenticated. Please authenticate with GitHub first.');
-        return null;
-    }
-
-    try {
-        const response = await axios.get('https://api.github.com/user', {
-            headers: { Authorization: `token ${token}` }
-        });
-        return {
-            login: response.data.login,
-            avatar_url: response.data.avatar_url,
-            public_repos: response.data.public_repos,
-            private_repos: response.data.total_private_repos,
-            total_stars: response.data.total_stars,
-            followers: response.data.followers,
-            following: response.data.following
-        };
-    } catch (error) {
-        vscode.window.showErrorMessage('Failed to fetch user name from GitHub');
-        console.error(error);
-        return null;
-    }
 }
 
 async function fetchGitHubData() {
@@ -264,8 +359,18 @@ function addNewTask(task) {
         if (err) {
             vscode.window.showErrorMessage('Failed to add task.');
         } else {
-            updateTasks(); // Asigurăm că updateTasks este apelată pentru a actualiza webview-ul
+            updateTasks();
         }
+    });
+}
+
+function editTask(task, callback) {
+    updateTask(task, (err) => {
+        if (err) {
+            console.error('Error editing task:', err.message);
+            return callback(err);
+        }
+        callback(null);
     });
 }
 
@@ -589,6 +694,27 @@ function sendSessionCountsToWebview(webview) {
             command: 'loadSessionCounts',
             data: rows
         });
+    });
+}
+
+// Funcție pentru calcularea și afișarea rating-ului
+function calculateAndShowRating() {
+    calculateWeeklyRating((err, result) => {
+        if (err) {
+            vscode.window.showErrorMessage('Failed to calculate rating.');
+            return;
+        }
+
+        console.log('Rating result:', result);
+
+        if (dashboardPanel) {
+            dashboardPanel.webview.postMessage({ 
+                command: 'showRating', 
+                rating: result.rating + ' / 10', 
+                explanation: result.explanation,
+                suggestions: result.suggestions
+            });
+        }
     });
 }
 

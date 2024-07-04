@@ -6,12 +6,11 @@ const CLIENT_ID = 'Ov23liXu10LVVlnv7MAw';
 const CLIENT_SECRET = '1e00adf51e3ed046cd6632e0114ac7578e1bb642';
 const REDIRECT_URI = 'http://localhost:3000/callback';
 
-// Funcția principală de autentificare cu GitHub
-export function authenticateWithGitHub() {
+export async function authenticateWithGitHub() {
     const oldToken = vscode.workspace.getConfiguration().get('devcare.githubAccessToken');
     if (oldToken) {
-        vscode.workspace.getConfiguration().update('devcare.githubAccessToken', undefined, vscode.ConfigurationTarget.Global);
-        vscode.workspace.getConfiguration().update('devcare.githubUser', undefined, vscode.ConfigurationTarget.Global);
+        await vscode.workspace.getConfiguration().update('devcare.githubAccessToken', undefined, vscode.ConfigurationTarget.Global);
+        await vscode.workspace.getConfiguration().update('devcare.githubUser', undefined, vscode.ConfigurationTarget.Global);
     }
 
     const app = express();
@@ -19,7 +18,7 @@ export function authenticateWithGitHub() {
         vscode.window.showInformationMessage('Server started on http://localhost:3000');
     });
 
-    app.get('/callback', async (req: express.Request, res: express.Response) => {
+    app.get('/callback', async (req, res) => {
         const code = req.query.code as string;
         if (!code) {
             res.send('Error: no code provided');
@@ -27,7 +26,7 @@ export function authenticateWithGitHub() {
         }
 
         try {
-            console.log('Received code:', code); // Log the received code
+            console.log('Received code:', code);
 
             const tokenResponse = await axios.post('https://github.com/login/oauth/access_token', {
                 client_id: CLIENT_ID,
@@ -40,24 +39,28 @@ export function authenticateWithGitHub() {
                 },
             });
 
-            console.log('Token response:', tokenResponse.data); // Log the token response
+            console.log('Token response:', tokenResponse.data);
 
             const accessToken = tokenResponse.data.access_token;
+            console.log('Access token:', accessToken);
 
             if (!accessToken) {
-                console.error('No access token received:', tokenResponse.data);
                 res.send('Error: no access token received');
                 return;
             }
 
-            vscode.window.showInformationMessage('Successfully authenticated with GitHub!');
-
-            // Salvează tokenul de acces în contextul extensiei
             await vscode.workspace.getConfiguration().update('devcare.githubAccessToken', accessToken, vscode.ConfigurationTarget.Global);
 
-            // Obține și salvează datele utilizatorului
             const userData = await fetchGitHubUserData(accessToken);
+            console.log('User data:', userData);
+
+            if (!userData) {
+                res.send('Error: failed to fetch user data');
+                return;
+            }
+
             await vscode.workspace.getConfiguration().update('devcare.githubUser', userData, vscode.ConfigurationTarget.Global);
+            vscode.window.showInformationMessage('Successfully authenticated with GitHub!');
 
             res.send('Authentication successful! You can close this window.');
         } catch (err: any) {
@@ -70,7 +73,7 @@ export function authenticateWithGitHub() {
             });
             res.send('Error retrieving access token');
         } finally {
-            server.close();
+            setTimeout(() => server.close(), 5000); // Închide serverul după 5 secunde pentru a asigura completarea cererilor
         }
     });
 
@@ -78,8 +81,7 @@ export function authenticateWithGitHub() {
     vscode.env.openExternal(vscode.Uri.parse(authUrl));
 }
 
-// Funcție auxiliară pentru obținerea datelor utilizatorului de pe GitHub
-async function fetchGitHubUserData(token: string) {
+async function fetchGitHubUserData(token) {
     try {
         const userResponse = await axios.get('https://api.github.com/user', {
             headers: { Authorization: `token ${token}` }
@@ -135,13 +137,10 @@ async function fetchGitHubUserData(token: string) {
             recentPRs
         };
     } catch (err) {
-        console.error('Error fetching GitHub user data:', {
-            message: err.message,
-            response: err.response ? {
-                status: err.response.status,
-                data: err.response.data
-            } : null
-        });
+        vscode.window.showErrorMessage('Failed to fetch GitHub user data.');
+        console.error(err);
         throw err;
     }
 }
+
+export { fetchGitHubUserData };

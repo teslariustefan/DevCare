@@ -20,6 +20,8 @@ function getWebviewContent(userInfo) {
         </li>
     `).join('') : '<li>No recent pull requests</li>';
 
+    const isGuest = !userInfo.login;
+
     return `
     <!DOCTYPE html>
     <html lang="en">
@@ -49,9 +51,12 @@ function getWebviewContent(userInfo) {
                 border: 1px solid #fff;
                 border-radius: 5px;
                 background-color: #2e2e2e;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
             }
             canvas {
-                background-color: #add8e6; /* Fundal albastru deschis */
+                background-color: #1e1e1e;
             }
             button {
                 background-color: #007acc;
@@ -61,6 +66,8 @@ function getWebviewContent(userInfo) {
                 border-radius: 5px;
                 cursor: pointer;
                 transition: background-color 0.3s, transform 0.2s, box-shadow 0.3s;
+                margin: 5px;
+                width: calc(100% - 10px);
             }
             button:hover {
                 background-color: #005f9e;
@@ -102,48 +109,206 @@ function getWebviewContent(userInfo) {
             }
             .pomodoro-icon {
                 color: tomato;
-                font-size: 1.5rem;
+                font-size: 5rem;
             }
             #timeRemaining {
                 font-size: 1.2rem;
                 color: #ffcc00;
+                margin-top: 10px;
             }
-            @keyframes countdown {
-                0% { color: #ffcc00; }
-                100% { color: #ff3333; }
+            .accordion {
+                background-color: #2e2e2e;
+                color: white;
+                cursor: pointer;
+                padding: 15px;
+                width: 100%;
+                border: none;
+                text-align: left;
+                outline: none;
+                font-size: 1.2rem;
+                transition: background-color 0.2s;
+            }
+            .accordion:hover {
+                background-color: #444;
+            }
+            .accordion:after {
+                content: '\\002B';
+                color: white;
+                font-weight: bold;
+                float: right;
+                margin-left: 5px;
+            }
+            .accordion.active:after {
+                content: "\\2212";
+            }
+            .panel {
+                padding: 0 15px;
+                background-color: #2e2e2e;
+                display: none;
+                overflow: hidden;
+                width: 100%;
+                max-width: 600px;
+            }
+            .profile-card {
+                background-color: #444;
+                padding: 20px;
+                border-radius: 10px;
+                text-align: center;
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+                margin-bottom: 20px;
+            }
+            .profile-card img {
+                border-radius: 50%;
+                width: 100px;
+                height: 100px;
+                margin-bottom: 15px;
+                display: block;
+                margin-left: auto;
+                margin-right: auto;
+            }
+            .profile-info p {
+                margin: 5px 0;
+            }
+            .profile-info h2 {
+                margin-bottom: 10px;
+            }
+            .tabs {
+                display: flex;
+                flex-direction: row;
+                justify-content: center;
+                margin-top: 20px;
+            }
+            .tab-button {
+                background-color: #007acc;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                cursor: pointer;
+                transition: background-color 0.3s;
+                margin: 0 5px;
+                border-radius: 5px 5px 0 0;
+            }
+            .tab-button:hover {
+                background-color: #005f9e;
+            }
+            .tab-button.active {
+                background-color: #444;
+                color: #fff;
+            }
+            .tab-content {
+                display: none;
+                width: 100%;
+                max-width: 600px;
+                padding: 20px;
+                border: 1px solid #444;
+                border-radius: 0 0 5px 5px;
+                background-color: #2e2e2e;
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+                margin-top: 20px;
+                text-align: left;
+                box-sizing: border-box;
+            }
+            .tab-content.active {
+                display: block;
+            }
+            .profile-details {
+                width: 100%;
+                max-width: 600px;
+                background-color: #2e2e2e;
+                padding: 15px;
+                border-radius: 10px;
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+                margin-top: 20px;
+            }
+            .rating-section {
+                margin-top: 20px;
+                padding: 15px;
+                border: 1px solid #fff;
+                border-radius: 5px;
+                background-color: #2e2e2e;
+                text-align: center;
+            }
+            .rating-score {
+                font-size: 2rem;
+                color: #ffcc00;
             }
         </style>
     </head>
     <body>
         <h1>Welcome to DevCare Dashboard!</h1>
-        <div class="container">
-            <h2>Timp total de lucru și pauză pe zi</h2>
-            <canvas id="sessionTimesChart" width="400" height="200"></canvas>
+
+        <div class="profile-card">
+            <img id="authAvatar" src="${isGuest ? '' : userInfo.avatar_url}" alt="User Avatar" style="${isGuest ? 'display:none;' : 'display:block;'}"/>
+            <div class="profile-info">
+                <h2 id="userName">${isGuest ? 'Guest' : userInfo.login}</h2>
+                <p>Public Repositories: <span id="publicRepos">${isGuest ? 'N/A' : userInfo.public_repos}</span></p>
+                <p>Private Repositories: <span id="privateRepos">${isGuest ? 'N/A' : userInfo.private_repos}</span></p>
+                <p>Total Stars: <span id="totalStars">${isGuest ? 'N/A' : userInfo.total_stars}</span></p>
+                <p>Followers: <span id="followers">${isGuest ? 'N/A' : userInfo.followers}</span></p>
+                <p>Following: <span id="following">${isGuest ? 'N/A' : userInfo.following}</span></p>
+            </div>
+            ${isGuest ? '<button id="authButton" title="Click to authenticate with GitHub"><span>🔒</span> Authenticate with GitHub</button>' : ''}
         </div>
-        <div class="container">
-            <h2>Proporția timpului de lucru și pauză</h2>
-            <canvas id="workBreakProportionChart" width="400" height="200"></canvas>
+
+        <div class="profile-details">
+            <h2>GitHub Information</h2>
+            <div class="tabs">
+                <button class="tab-button active" data-tab="commits">Recent Commits</button>
+                <button class="tab-button" data-tab="issues">Recent Issues</button>
+                <button class="tab-button" data-tab="prs">Recent Pull Requests</button>
+            </div>
+            <div id="commits" class="tab-content active">
+                <ul>${isGuest ? '<li>No recent commits</li>' : commitList}</ul>
+            </div>
+            <div id="issues" class="tab-content">
+                <ul>${isGuest ? '<li>No recent issues</li>' : issueList}</ul>
+            </div>
+            <div id="prs" class="tab-content">
+                <ul>${isGuest ? '<li>No recent pull requests</li>' : prList}</ul>
+            </div>
         </div>
+
         <div class="container">
-            <h2>Timp mediu de lucru și pauză pe sesiune</h2>
-            <canvas id="averageSessionTimesChart" width="400" height="200"></canvas>
-        </div>
-        <div class="container">
-            <h2>Numărul de sesiuni de lucru și pauză pe zi</h2>
-            <canvas id="sessionCountsChart" width="400" height="200"></canvas>
-        </div>
-        <div id="authContainer" class="container">
-            <p id="authMessage">Authenticated User: <span id="userName">Guest</span></p>
-            <img id="authAvatar" src="" alt="User Avatar" style="display:none;"/>
-            <p>Public Repositories: <span id="publicRepos">N/A</span></p>
-            <p>Private Repositories: <span id="privateRepos">N/A</span></p>
-            <p>Total Stars: <span id="totalStars">N/A</span></p>
-            <p>Followers: <span id="followers">N/A</span></p>
-            <p>Following: <span id="following">N/A</span></p>
-            <button id="authButton" title="Click to authenticate with GitHub">
-                <span>🔒</span> Authenticate with GitHub
+            <h2>Timer Settings</h2>
+            <input id="timeInput" type="number" min="1" value="60" />
+            <button id="reminderButton" title="Set a reminder for taking a break">
+                <span>🕒</span> Set reminder for break
+            </button>
+            <button id="pauseButton" title="Pause the current reminder">
+                <span>⏸️</span> Pause
+            </button>
+            <button id="resumeButton" title="Resume the paused reminder">
+                <span>▶️</span> Resume
+            </button>
+            <button id="switchTimerButton" title="Switch or reset the timer">
+                <span>🔄</span> Reset/Switch timer
             </button>
         </div>
+
+        <div class="container">
+            <h2>Pomodoro Technique</h2>
+            <select id="taskSelector">
+                <!-- Task options will be injected here -->
+            </select>
+            <button id="pomodoroButton" title="Start the Pomodoro technique">
+                <span>🕒</span> Start Pomodoro Technique
+            </button>
+        </div>
+
+        <div class="container">
+            <h2>Automated Timer</h2>
+            <select id="automatedTimerLevel">
+                <option value="easy">Easy</option>
+                <option value="medium">Medium</option>
+                <option value="hard">Hard</option>
+            </select>
+            <button id="automatedTimerButton" title="Start Automated Timer">
+                <span>🕒</span> Start Automated Timer
+            </button>
+        </div>
+
+        <p id="timeRemaining"></p>
+
         <div class="container">
             <h2>Tasks</h2>
             <form id="taskForm">
@@ -156,6 +321,7 @@ function getWebviewContent(userInfo) {
                     <tr>
                         <th>Tasks</th>
                         <th>Number of Pomodoros</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody id="taskList">
@@ -163,45 +329,34 @@ function getWebviewContent(userInfo) {
                 </tbody>
             </table>
         </div>
-        <div>
-            <h2>Recent Activity</h2>
-            <h3>Recent Commits</h3>
-            <ul id="commitList">${commitList}</ul>
-            <h3>Recent Issues</h3>
-            <ul id="issueList">${issueList}</ul>
-            <h3>Recent Pull Requests</h3>
-            <ul id="prList">${prList}</ul>
+
+        <button class="accordion">Timp total de lucru și pauză pe zi</button>
+        <div class="panel">
+            <canvas id="sessionTimesChart" width="400" height="200"></canvas>
         </div>
-        <input id="timeInput" type="number" min="1" value="60" />
-        <div id="buttonContainer" class="container">
-            <button id="reminderButton" title="Set a reminder for taking a break">
-                <span>🕒</span> Set reminder for break
-            </button>
-            <button id="pauseButton" title="Pause the current reminder">
-                <span>⏸️</span> Pause
-            </button>
-            <button id="resumeButton" title="Resume the paused reminder">
-                <span>▶️</span> Resume
-            </button>
-            <select id="taskSelector">
-                <!-- Task options will be injected here -->
-            </select>
-            <button id="pomodoroButton" title="Start the Pomodoro technique">
-                <span>🕒</span> Start Pomodoro Technique
-            </button>
-            <button id="switchTimerButton" title="Switch or reset the timer">
-                <span>🔄</span> Reset/Switch timer
-            </button>
-            <select id="automatedTimerLevel">
-                <option value="easy">Easy</option>
-                <option value="medium">Medium</option>
-                <option value="hard">Hard</option>
-            </select>
-            <button id="automatedTimerButton" title="Start Automated Timer">
-                <span>🕒</span> Start Automated Timer
-            </button>
+
+        <button class="accordion">Proporția timpului de lucru și pauză</button>
+        <div class="panel">
+            <canvas id="workBreakProportionChart" width="400" height="200"></canvas>
         </div>
-        <p id="timeRemaining"></p>
+
+        <button class="accordion">Timp mediu de lucru și pauză pe sesiune</button>
+        <div class="panel">
+            <canvas id="averageSessionTimesChart" width="400" height="200"></canvas>
+        </div>
+
+        <button class="accordion">Numărul de sesiuni de lucru și pauză pe zi</button>
+        <div class="panel">
+            <canvas id="sessionCountsChart" width="400" height="200"></canvas>
+        </div>
+
+        <!-- New Rating Section -->
+        <div class="rating-section">
+            <h2>Your Weekly Rating</h2>
+            <p class="rating-score" id="weeklyRating">-</p>
+            <p id="ratingExplanation">-</p>
+            <ul id="ratingSuggestions"></ul>
+        </div>
 
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script>
@@ -250,7 +405,7 @@ function getWebviewContent(userInfo) {
                     document.getElementById('following').textContent = message.following;
                     document.getElementById('commitList').innerHTML = message.recentCommits.map(commit => \`
                         <li>
-                            <strong>\${commit.repository}</strong>: \${commit.message} <br>
+                            <strong>\${commit.repository}\</strong>: \${commit.message} <br>
                             <small>\${commit.date}\</small>
                         </li>
                     \`).join('');
@@ -258,14 +413,12 @@ function getWebviewContent(userInfo) {
                         <li>
                             <strong>\${issue.repository}\</strong>: \${issue.title} <br>
                             <small>\${issue.date}\</small>
-                        </li>
-                    \`).join('');
+                        \`).join('');
                     document.getElementById('prList').innerHTML = message.recentPRs.map(pr => \`
                         <li>
                             <strong>\${pr.repository}\</strong>: \${pr.title} <br>
                             <small>\${pr.date}\</small>
-                        </li>
-                    \`).join('');
+                        \`).join('');
                 }
                 if (message.command === 'updateState') {
                     const state = message.state;
@@ -276,7 +429,7 @@ function getWebviewContent(userInfo) {
                         authAvatar.src = state.githubUser.avatar_url;
                         authAvatar.style.display = 'block';
                         document.getElementById('publicRepos').textContent = state.githubUser.public_repos;
-                        document.getElementById('privateRepos').textContent = state.githubUser.private_repos;
+                        document.getElementById('privateRepos').textContent = state.githubUser.total_private_repos;
                         document.getElementById('totalStars').textContent = state.githubUser.total_stars;
                         document.getElementById('followers').textContent = state.githubUser.followers;
                         document.getElementById('following').textContent = state.githubUser.following;
@@ -312,17 +465,55 @@ function getWebviewContent(userInfo) {
                     message.tasks.forEach(task => {
                         const row = document.createElement('tr');
                         const taskNameCell = document.createElement('td');
+                        taskNameCell.style.fontSize = '1.2rem';
                         const taskPomodorosCell = document.createElement('td');
+                        taskPomodorosCell.style.fontSize = '1rem';
+                        const actionsCell = document.createElement('td');
+
                         taskNameCell.textContent = task.name;
                         taskPomodorosCell.innerHTML = '🍅'.repeat(task.pomodoros);
+
+                        const editButton = document.createElement('button');
+                        editButton.textContent = 'Edit';
+                        editButton.addEventListener('click', () => {
+                            const newName = prompt('Enter new task name:', task.name);
+                            const newPomodoros = prompt('Enter new number of pomodoros:', task.pomodoros);
+                            if (newName !== null && newPomodoros !== null) {
+                                vscode.postMessage({ command: 'editTask', task: { id: task.id, name: newName, pomodoros: parseInt(newPomodoros) } });
+                            }
+                        });
+
+                        const deleteButton = document.createElement('button');
+                        deleteButton.textContent = 'Delete';
+                        deleteButton.style.backgroundColor = 'red';
+                        deleteButton.addEventListener('click', () => {
+                            vscode.postMessage({ command: 'deleteTask', taskId: task.id });
+                        });
+
+                        actionsCell.appendChild(editButton);
+                        actionsCell.appendChild(deleteButton);
+
                         row.appendChild(taskNameCell);
                         row.appendChild(taskPomodorosCell);
+                        row.appendChild(actionsCell);
                         taskList.appendChild(row);
 
                         const option = document.createElement('option');
                         option.value = task.id;
                         option.textContent = task.name + " (" + task.pomodoros + " 🍅)";
                         taskSelector.appendChild(option);
+                    });
+                }
+                // Handle the new showRating command
+                if (message.command === 'showRating') {
+                    document.getElementById('weeklyRating').textContent = message.rating;
+                    document.getElementById('ratingExplanation').textContent = message.explanation;
+                    const suggestionsList = document.getElementById('ratingSuggestions');
+                    suggestionsList.innerHTML = '';
+                    message.suggestions.forEach(suggestion => {
+                        const li = document.createElement('li');
+                        li.textContent = suggestion;
+                        suggestionsList.appendChild(li);
                     });
                 }
             });
@@ -344,15 +535,15 @@ function getWebviewContent(userInfo) {
                             {
                                 label: 'Work Time (minutes)',
                                 data: workTimes,
-                                backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                                borderColor: 'rgba(75, 192, 192, 1)',
+                                backgroundColor: 'rgba(0, 255, 0, 1)',
+                                borderColor: 'rgba(0, 128, 0, 1)',
                                 borderWidth: 1
                             },
                             {
                                 label: 'Break Time (minutes)',
                                 data: breakTimes,
-                                backgroundColor: 'rgba(255, 99, 132, 0.2)',
-                                borderColor: 'rgba(255, 99, 132, 1)',
+                                backgroundColor: 'rgba(255, 0, 0, 1)',
+                                borderColor: 'rgba(128, 0, 0, 1)',
                                 borderWidth: 1
                             }
                         ]
@@ -381,8 +572,8 @@ function getWebviewContent(userInfo) {
                         labels: ['Work Time', 'Break Time'],
                         datasets: [{
                             data: [totalWorkTime / 60, totalBreakTime / 60],
-                            backgroundColor: ['rgba(75, 192, 192, 0.2)', 'rgba(255, 99, 132, 0.2)'],
-                            borderColor: ['rgba(75, 192, 192, 1)', 'rgba(255, 99, 132, 1)'],
+                            backgroundColor: ['rgba(0, 255, 0, 1)', 'rgba(255, 0, 0, 1)'],
+                            borderColor: ['rgba(0, 128, 0, 1)', 'rgba(128, 0, 0, 1)'],
                             borderWidth: 1
                         }]
                     },
@@ -418,8 +609,8 @@ function getWebviewContent(userInfo) {
                         datasets: [{
                             label: 'Average Time (minutes)',
                             data: [data.avg_work_time / 60, data.avg_break_time / 60],
-                            backgroundColor: ['rgba(75, 192, 192, 0.2)', 'rgba(255, 99, 132, 0.2)'],
-                            borderColor: ['rgba(75, 192, 192, 1)', 'rgba(255, 99, 132, 1)'],
+                            backgroundColor: ['rgba(0, 255, 0, 1)', 'rgba(255, 0, 0, 1)'],
+                            borderColor: ['rgba(0, 128, 0, 1)', 'rgba(128, 0, 0, 1)'],
                             borderWidth: 1
                         }]
                     },
@@ -450,16 +641,16 @@ function getWebviewContent(userInfo) {
                             {
                                 label: 'Work Sessions',
                                 data: workSessions,
-                                backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                                borderColor: 'rgba(75, 192, 192, 1)',
+                                backgroundColor: 'rgba(0, 255, 0, 1)',
+                                borderColor: 'rgba(0, 128, 0, 1)',
                                 borderWidth: 1,
                                 fill: false
                             },
                             {
                                 label: 'Break Sessions',
                                 data: breakSessions,
-                                backgroundColor: 'rgba(255, 99, 132, 0.2)',
-                                borderColor: 'rgba(255, 99, 132, 1)',
+                                backgroundColor: 'rgba(255, 0, 0, 1)',
+                                borderColor: 'rgba(128, 0, 0, 1)',
                                 borderWidth: 1,
                                 fill: false
                             }
@@ -483,7 +674,9 @@ function getWebviewContent(userInfo) {
             document.getElementById('pauseButton').addEventListener('click', () => vscode.postMessage({ command: 'pauseReminder' }));
             document.getElementById('resumeButton').addEventListener('click', () => vscode.postMessage({ command: 'startReminder' }));
             document.getElementById('switchTimerButton').addEventListener('click', () => vscode.postMessage({ command: 'stopReminder' }));
-            document.getElementById('authButton').addEventListener('click', () => vscode.postMessage({ command: 'authenticateWithGitHub' }));
+            if (document.getElementById('authButton')) {
+                document.getElementById('authButton').addEventListener('click', () => vscode.postMessage({ command: 'authenticateWithGitHub' }));
+            }
             document.getElementById('taskForm').addEventListener('submit', (event) => {
                 event.preventDefault();
                 const taskName = document.getElementById('taskName').value;
@@ -495,6 +688,34 @@ function getWebviewContent(userInfo) {
             document.getElementById('automatedTimerButton').addEventListener('click', () => {
                 const level = document.getElementById('automatedTimerLevel').value;
                 vscode.postMessage({ command: 'startAutomatedTimer', level });
+            });
+
+            const acc = document.getElementsByClassName('accordion');
+            for (let i = 0; i < acc.length; i++) {
+                acc[i].addEventListener('click', function() {
+                    this.classList.toggle('active');
+                    const panel = this.nextElementSibling;
+                    if (panel.style.display === 'block') {
+                        panel.style.display = 'none';
+                    } else {
+                        panel.style.display = 'block';
+                    }
+                });
+            }
+
+            const tabButtons = document.querySelectorAll('.tab-button');
+            const tabContents = document.querySelectorAll('.tab-content');
+
+            tabButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    const tab = button.getAttribute('data-tab');
+
+                    tabButtons.forEach(btn => btn.classList.remove('active'));
+                    tabContents.forEach(content => content.classList.remove('active'));
+
+                    button.classList.add('active');
+                    document.getElementById(tab).classList.add('active');
+                });
             });
         </script>
     </body>
